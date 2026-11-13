@@ -13,7 +13,27 @@ const rawText = ref("");
 const formError = ref("");
 const busy = ref(false);
 
+const catalog = ref({ settings: null, entries: [], effective_disposition: "block", effective_disposition_name: "挡在未接纳" });
+const dispositionChoice = ref("block");
+const settingsChoice = ref("block");
+const newCode = ref("");
+const catalogError = ref("");
+const settingsError = ref("");
+
 const canWrite = computed(() => profile.value && profile.value.role === "writer");
+const settingsLocked = computed(() => Boolean(catalog.value.settings && catalog.value.settings.locked_today));
+
+const registeredLanded = computed(() => (current.value ? current.value.landed.filter((row) => !row.unregistered) : []));
+const unregisteredLanded = computed(() => (current.value ? current.value.landed.filter((row) => row.unregistered) : []));
+const unregisteredRejected = computed(() => (current.value ? current.value.rejected.filter((row) => row.unregistered) : []));
+const unregisteredCodes = computed(() => {
+  const codes = new Set(unregisteredLanded.value.map((row) => row.station_code));
+  for (const row of unregisteredRejected.value) {
+    const code = row.raw_line.split("|")[0].trim();
+    if (code) codes.add(code);
+  }
+  return [...codes].sort();
+});
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -27,8 +47,16 @@ async function request(path, options = {}) {
   return data;
 }
 
+function applyCatalog(data) {
+  catalog.value = data;
+  settingsChoice.value = data.settings ? data.settings.disposition : data.effective_disposition;
+  dispositionChoice.value = data.effective_disposition;
+}
+
 async function refresh() {
-  batches.value = await request("/api/batches");
+  const [batchList, catalogData] = await Promise.all([request("/api/batches"), request("/api/catalog")]);
+  batches.value = batchList;
+  applyCatalog(catalogData);
   if (!current.value && batches.value.length) {
     await openBatch(batches.value[0].id);
   }
@@ -63,7 +91,7 @@ async function submitBatch() {
     const data = await request("/api/batches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: title.value, raw_text: rawText.value }),
+      body: JSON.stringify({ title: title.value, raw_text: rawText.value, disposition: dispositionChoice.value }),
     });
     title.value = "";
     rawText.value = "";
@@ -73,6 +101,37 @@ async function submitBatch() {
     formError.value = error.message;
   } finally {
     busy.value = false;
+  }
+}
+
+async function saveSettings() {
+  settingsError.value = "";
+  try {
+    applyCatalog(
+      await request("/api/catalog/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disposition: settingsChoice.value }),
+      })
+    );
+  } catch (error) {
+    settingsError.value = error.message;
+  }
+}
+
+async function addEntry() {
+  catalogError.value = "";
+  try {
+    applyCatalog(
+      await request("/api/catalog/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ station_code: newCode.value }),
+      })
+    );
+    newCode.value = "";
+  } catch (error) {
+    catalogError.value = error.message;
   }
 }
 
@@ -112,23 +171,66 @@ if (token.value) {
   </main>
 
   <main v-else class="desk">
-    <section class="paste">
-      <h2>贴入这一批</h2>
-      <p class="rule">质量旗 A 实测，M 插补，B 可疑。同一站同一时刻只能落一次。</p>
-      <label>批次名<input v-model="title" :disabled="!canWrite" placeholder="例如 堡镇 11-13 午班" /></label>
-      <textarea
-        v-model="rawText"
-        :disabled="!canWrite"
-        placeholder="BZ03|202611130900|176|A"
-        spellcheck="false"
-      />
-      <button :disabled="!canWrite || busy" @click="submitBatch">归集这一批</button>
-      <p v-if="!canWrite" class="quiet">档案员只能翻已落入的报文。</p>
-      <p v-if="formError" class="warn">{{ formError }}</p>
-    </section>
+    <div class="side">
+      <section class="paste">
+        <h2>贴入这一批</h2>
+        <p class="rule">质量旗 A 实测，M 插补，B 可疑。同一站同一时刻只能落一次。目录外的编码不会悄悄入库。</p>
+        <label>批次名<input v-model="title" :disabled="!canWrite" placeholder="例如 堡镇 11-13 午班" /></label>
+        <textarea
+          v-model="rawText"
+          :disabled="!canWrite"
+          placeholder="BZ03|202611130900|176|A"
+          spellcheck="false"
+        />
+        <label>
+          这批未入册编码的去向
+          <select v-model="dispositionChoice" :disabled="!canWrite">
+            <option value="block">挡在未接纳</option>
+            <option value="land_and_mark">先落库再标未入册</option>
+          </select>
+        </label>
+        <p class="rule">贴入的去向若与目录设置不一致，未入册的行会停住并记「目录去向不符」。</p>
+        <button :disabled="!canWrite || busy" @click="submitBatch">归集这一批</button>
+        <p v-if="!canWrite" class="quiet">档案员只能翻已落入的报文。</p>
+        <p v-if="formError" class="warn">{{ formError }}</p>
+      </section>
+
+      <section class="catalog">
+        <h2>目录设置</h2>
+        <p class="rule">
+          未入册去向：{{ catalog.effective_disposition_name }}
+          <template v-if="catalog.settings">
+            （{{ catalog.settings.set_by }} 定于 {{ catalog.settings.set_on }}<span v-if="settingsLocked">，今日已锁定</span>）
+          </template>
+          <template v-else>（尚未设定，默认挡在未接纳）</template>
+        </p>
+        <template v-if="canWrite">
+          <label>
+            定下今日去向
+            <select v-model="settingsChoice" :disabled="settingsLocked">
+              <option value="block">挡在未接纳</option>
+              <option value="land_and_mark">先落库再标未入册</option>
+            </select>
+          </label>
+          <button :disabled="settingsLocked" @click="saveSettings">定下，今天不再改</button>
+          <p v-if="settingsError" class="warn">{{ settingsError }}</p>
+          <label>新站码<input v-model="newCode" placeholder="例如 BZ03" @keyup.enter="addEntry" /></label>
+          <button :disabled="!newCode.trim()" @click="addEntry">写进目录</button>
+          <p v-if="catalogError" class="warn">{{ catalogError }}</p>
+        </template>
+        <p v-else class="quiet">档案员只能看目录，不能改。</p>
+        <ul class="codes">
+          <li v-for="entry in catalog.entries" :key="entry.station_code">
+            <code>{{ entry.station_code }}</code>
+            <span>{{ entry.created_by }} 收录</span>
+          </li>
+          <li v-if="!catalog.entries.length">目录还是空的</li>
+        </ul>
+      </section>
+    </div>
 
     <section class="slips">
-      <h2>已收批次</h2>
+      <h2>已收列表</h2>
       <button
         v-for="batch in batches"
         :key="batch.id"
@@ -138,35 +240,74 @@ if (token.value) {
       >
         <strong>{{ batch.title }}</strong>
         <em>{{ batch.status }}</em>
-        <span>落入 {{ batch.accepted_count }} 行 · 未接纳 {{ batch.rejected_count }} 行</span>
+        <span>站码 {{ batch.station_codes.length ? batch.station_codes.join("、") : "—" }}</span>
+        <span>落入 {{ batch.accepted_count }} 行 · 未入册 {{ batch.unregistered_count }} 行</span>
+        <span>去向 {{ batch.disposition_name }}</span>
       </button>
 
       <article v-if="current" class="tape">
         <header>
           <h3>{{ current.batch.title }}</h3>
-          <span>{{ current.batch.status }}</span>
+          <span>{{ current.batch.status }} · 去向 {{ current.batch.disposition_name }}</span>
         </header>
-        <h4>已落库</h4>
+
+        <section class="unreg">
+          <h4>未入册卡片</h4>
+          <p v-if="!unregisteredLanded.length && !unregisteredRejected.length" class="quiet">这一批没有未入册的行。</p>
+          <template v-else>
+            <p class="rule">涉及站码：{{ unregisteredCodes.join("、") || "—" }}</p>
+            <template v-if="unregisteredLanded.length">
+              <h5>先落库的未入册行</h5>
+              <table>
+                <thead>
+                  <tr><th>行</th><th>站</th><th>时刻</th><th>厘米</th><th>旗</th><th>未入册原因</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in unregisteredLanded" :key="row.line_no">
+                    <td>{{ row.line_no }}</td>
+                    <td>{{ row.station_code }}</td>
+                    <td>{{ row.observed_at }}</td>
+                    <td>{{ row.tide_cm }}</td>
+                    <td>{{ row.flag_label }}</td>
+                    <td>{{ row.unregistered_reason }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+            <template v-if="unregisteredRejected.length">
+              <h5>被挡下的未入册行</h5>
+              <ul>
+                <li v-for="row in unregisteredRejected" :key="row.line_no">
+                  <code>{{ row.raw_line }}</code>
+                  <span>{{ row.reason }}</span>
+                </li>
+              </ul>
+            </template>
+          </template>
+        </section>
+
+        <h4>已入册（已落库）</h4>
         <table>
           <thead>
             <tr><th>行</th><th>站</th><th>时刻</th><th>厘米</th><th>旗</th></tr>
           </thead>
           <tbody>
-            <tr v-for="row in current.landed" :key="row.line_no">
+            <tr v-for="row in registeredLanded" :key="row.line_no">
               <td>{{ row.line_no }}</td>
               <td>{{ row.station_code }}</td>
               <td>{{ row.observed_at }}</td>
               <td>{{ row.tide_cm }}</td>
               <td>{{ row.flag_label }}</td>
             </tr>
-            <tr v-if="!current.landed.length"><td colspan="5">这一批没有落入的行</td></tr>
+            <tr v-if="!registeredLanded.length"><td colspan="5">这一批没有已入册的落库行</td></tr>
           </tbody>
         </table>
+
         <h4>未接纳</h4>
         <ul>
           <li v-for="row in current.rejected" :key="row.line_no">
             <code>{{ row.raw_line }}</code>
-            <span>{{ row.reason }}</span>
+            <span><b v-if="row.unregistered" class="tag">未入册</b>{{ row.reason }}</span>
           </li>
           <li v-if="!current.rejected.length">没有被挡下的行</li>
         </ul>
@@ -180,18 +321,18 @@ if (token.value) {
 .top { display: flex; justify-content: space-between; align-items: end; padding: 28px 0 12px; }
 .eyebrow { letter-spacing: 0.18em; text-transform: uppercase; color: #d7a15f; font-size: 12px; margin: 0 0 6px; }
 h1 { margin: 0; font-weight: 560; font-size: 34px; }
-h2, h3, h4 { margin: 0; }
+h2, h3, h4, h5 { margin: 0; }
 .who { display: flex; gap: 12px; align-items: center; }
 .ghost { background: transparent; color: #f3efe2; border: 1px solid rgba(243, 239, 226, 0.35); padding: 6px 12px; }
 .gate { padding: 24px 0 48px; }
-.gate form, .paste, .tape {
+.gate form, .paste, .catalog, .tape {
   background: #f3efe2;
   color: #1c2430;
   padding: 22px;
 }
 .gate form { width: min(420px, 100%); display: grid; gap: 12px; }
 label { display: grid; gap: 6px; font-size: 14px; }
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 0;
   background: #fffdf8;
@@ -202,7 +343,8 @@ input, textarea {
 textarea { min-height: 220px; font-family: "IBM Plex Mono", Consolas, monospace; line-height: 1.6; }
 button { background: #9d2c2c; color: #fffaf2; padding: 10px 14px; }
 .desk { display: grid; grid-template-columns: 360px 1fr; gap: 22px; padding-bottom: 48px; }
-.paste, .slips { display: grid; gap: 12px; align-content: start; }
+.side, .paste, .catalog, .slips { display: grid; gap: 12px; align-content: start; }
+.side { gap: 22px; }
 .rule, .quiet { margin: 0; color: #5c5648; font-size: 14px; }
 .slip {
   text-align: left;
@@ -216,14 +358,33 @@ button { background: #9d2c2c; color: #fffaf2; padding: 10px 14px; }
 .slip.on { border-color: #d7a15f; }
 .slip em { font-style: normal; color: #d7a15f; }
 .slip span, .tape li span { color: #5c5648; }
+.slip span { color: rgba(243, 239, 226, 0.72); }
 .tape header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .tape h4 { margin: 14px 0 8px; }
+.tape h5 { margin: 10px 0 6px; font-size: 14px; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #e4dcc8; font-size: 14px; }
 ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 li { display: grid; gap: 2px; }
 code { font-family: Consolas, monospace; }
 .warn { color: #9d2c2c; margin: 0; }
+.codes li { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px dashed #e4dcc8; padding: 4px 0; }
+.codes li span { color: #5c5648; font-size: 13px; }
+.unreg {
+  border: 1px solid #d7a15f;
+  background: #fbf4e4;
+  padding: 14px;
+  margin: 10px 0 4px;
+  display: grid;
+  gap: 8px;
+}
+.tag {
+  background: #d7a15f;
+  color: #1c2430;
+  font-size: 12px;
+  padding: 1px 6px;
+  margin-right: 6px;
+}
 @media (max-width: 900px) {
   .desk { grid-template-columns: 1fr; }
 }
