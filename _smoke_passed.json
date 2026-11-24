@@ -1,0 +1,12 @@
+{
+  "label": "tide-01",
+  "port": 7900,
+  "login_url": "http://127.0.0.1:7900/login",
+  "http_status": 200,
+  "checks": [
+    "含登录相关文案",
+    "含密码表单线索"
+  ],
+  "passed": true,
+  "checked_at": "2026-11-24T13:01:25+08:00"
+}
