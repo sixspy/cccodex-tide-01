@@ -67,10 +67,12 @@
       </section>
       <section class="卷">
         <h2>水位</h2>
+        <p class="说明" id="口径行">出窗口径加载中…</p>
         <div class="水位" id="水位"></div>
         <div class="工具">
           <button class="按钮" id="灌成片">灌窗内成片样例</button>
           <button class="按钮 次" id="灌迟到">灌迟到样例</button>
+          <button class="按钮 次" id="灌出窗">灌出窗噪声样例</button>
           <button class="按钮 青" id="关窗">关当前窗</button>
           <button class="按钮 次" id="贯验">跑窗贯验</button>
         </div>
@@ -82,6 +84,7 @@
         const r = o.窗规 || {};
         document.getElementById("尺起").textContent = (r["窗起"] || "窗起").slice(11, 16) || "窗起";
         document.getElementById("尺止").textContent = (r["窗止"] || "窗止").slice(11, 16) || "窗止";
+        document.getElementById("口径行").textContent = `出窗口径 ${r["出窗口径"] || "切流账册"} · 切流处置 ${r["切流处置"] || "进迟到匣"} · 入窗裁决只认事件时`;
         潮切.渲染水位(document.getElementById("水位"), o);
       }
       async function 跑(fn) {
@@ -93,6 +96,7 @@
       }
       document.getElementById("灌成片").onclick = () => 跑(() => 潮切.postJSON("/api/观测点/夹具/窗内成片样例"));
       document.getElementById("灌迟到").onclick = () => 跑(() => 潮切.postJSON("/api/观测点/夹具/迟到样例"));
+      document.getElementById("灌出窗").onclick = () => 跑(() => 潮切.postJSON("/api/观测点/夹具/出窗噪声样例"));
       document.getElementById("关窗").onclick = () => 跑(() => 潮切.postJSON("/api/关窗/跑"));
       document.getElementById("贯验").onclick = () => 跑(() => 潮切.postJSON("/api/窗贯验/跑"));
       刷新();

@@ -43,16 +43,30 @@
       </header>
 
       <section class="卷">
-        <div class="表绕"><table><thead><tr><th>编号</th><th>事件编号</th><th>运单键</th><th>原因</th><th>事件时</th></tr></thead><tbody id="表"></tbody></table></div>
+        <h2>出窗裁决卡</h2>
+        <p class="说明">同一笔入窗裁决的中文命运：迟到 / 整票拒 / 回刷拒 / 归档，连同拒因或归档键。</p>
+        <div class="阶段" id="卡"></div>
       </section>
-      <section class="卷"><div class="双栏"><p class="说明">迟到匣吃出窗事件。空桩「迟到升格回放」可再开，基线只保留旁路。</p><div class="侧注">行业皮：物流网点。拓扑：单流入窗，不是双轨。</div></div></section>
+      <section class="卷">
+        <div class="表绕"><table><thead><tr><th>编号</th><th>事件编号</th><th>运单键</th><th>原因</th><th>事件时</th><th>形态</th></tr></thead><tbody id="表"></tbody></table></div>
+      </section>
+      <section class="卷"><div class="双栏"><p class="说明">迟到匣吃出窗事件。切流账册下出窗点进匣并记指纹；双写两轨下出窗点走只读归档旁路，不进匣。</p><div class="侧注">行业皮：物流网点。拓扑：单流入窗，不是双轨。</div></div></section>
       <script>
       (async () => {
         const rows = await 潮切.getJSON("/api/迟到匣");
         const tb = document.getElementById("表");
-        if (!rows.length) { tb.innerHTML = `<tr><td colspan="5">${潮切.空态("迟到匣为空。回潮切台灌迟到样例。")}</td></tr>`; return; }
+        if (!rows.length) { tb.innerHTML = `<tr><td colspan="6">${潮切.空态("迟到匣为空。回潮切台灌迟到样例。")}</td></tr>`; }
         for (const r of rows) {
-          tb.appendChild(潮切.行(`<td>${r.编号}</td><td>${潮切.安全文本(r.事件编号)}</td><td>${潮切.安全文本(r.运单键)}</td><td>${潮切.徽章(r.原因,"警")}</td><td>${潮切.安全文本(r.事件时)}</td>`));
+          tb.appendChild(潮切.行(`<td>${r.编号}</td><td>${潮切.安全文本(r.事件编号)}</td><td>${潮切.安全文本(r.运单键)}</td><td>${潮切.徽章(r.原因,"警")}</td><td>${潮切.安全文本(r.事件时)}</td><td>${潮切.安全文本(r.裁决形态 || "—")}</td>`));
+        }
+        const 裁决 = (await 潮切.getJSON("/api/入窗裁决")).filter(d => d.命运 !== "入缓冲");
+        const 卡 = document.getElementById("卡");
+        if (!裁决.length) { 卡.innerHTML = 潮切.空态("尚无出窗裁决。灌出窗噪声样例后此处出卡。"); return; }
+        for (const d of 裁决.slice(0, 12)) {
+          const c = document.createElement("div");
+          c.className = "阶卡";
+          c.innerHTML = `<div class="序">${潮切.安全文本(d.形态标记)}</div><b>${潮切.安全文本(d.事件编号)}</b><span>${潮切.徽章(d.命运, d.命运 === "归档" ? "好" : "警")} ${潮切.安全文本(d.拒因或归档键 || "—")} · valid ${d.valid ? "✓" : "✗"}</span>`;
+          卡.appendChild(c);
         }
       })();
       </script>

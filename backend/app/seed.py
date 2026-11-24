@@ -72,7 +72,46 @@ CREATE TABLE IF NOT EXISTS 关窗批次 (
   成片数 INTEGER NOT NULL DEFAULT 0,
   报告 TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS 入窗裁决 (
+  事件编号 TEXT PRIMARY KEY,
+  窗号 TEXT NOT NULL,
+  命运 TEXT NOT NULL,
+  拒因 TEXT NOT NULL DEFAULT '',
+  归档键 TEXT NOT NULL DEFAULT '',
+  形态标记 TEXT NOT NULL DEFAULT '',
+  指纹 TEXT NOT NULL DEFAULT '',
+  裁决时 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS 切流账册 (
+  指纹 TEXT PRIMARY KEY,
+  事件编号 TEXT NOT NULL,
+  运单键 TEXT NOT NULL,
+  事件时 TEXT NOT NULL,
+  拒因 TEXT NOT NULL,
+  处置 TEXT NOT NULL,
+  记账时 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS 出窗归档 (
+  归档键 TEXT PRIMARY KEY,
+  事件编号 TEXT NOT NULL,
+  运单键 TEXT NOT NULL,
+  网点键 TEXT NOT NULL,
+  事件时 TEXT NOT NULL,
+  归档时 TEXT NOT NULL,
+  形态标记 TEXT NOT NULL DEFAULT ''
+);
 """
+
+默认窗规 = {
+    "窗长秒": "3600",
+    "允许迟到秒": "0",
+    "关窗策略": "按事件时整点",
+    "当前窗号": "W-demo",
+    "窗起": "2026-11-24T00:00:00Z",
+    "窗止": "2026-11-24T01:00:00Z",
+    "出窗口径": "切流账册",
+    "切流处置": "进迟到匣",
+}
 
 
 def 此刻() -> str:
@@ -82,16 +121,8 @@ def 此刻() -> str:
 def 初始化库() -> None:
     conn = 连接()
     conn.executescript(建表)
-    if conn.execute("SELECT COUNT(*) AS c FROM 窗规").fetchone()["c"] == 0:
-        for k, v in {
-            "窗长秒": "3600",
-            "允许迟到秒": "0",
-            "关窗策略": "按事件时整点",
-            "当前窗号": "W-demo",
-            "窗起": "2026-11-24T00:00:00Z",
-            "窗止": "2026-11-24T01:00:00Z",
-        }.items():
-            conn.execute("INSERT INTO 窗规(键,值) VALUES (?,?)", (k, v))
+    for k, v in 默认窗规.items():
+        conn.execute("INSERT OR IGNORE INTO 窗规(键,值) VALUES (?,?)", (k, v))
     if conn.execute("SELECT COUNT(*) AS c FROM 网点源").fetchone()["c"] == 0:
         for row in [
             ("网点-东站", "东站分拨", "华东", "示范网点"),

@@ -32,6 +32,7 @@ function 格式概览(o) {
     ["在缓冲", o["在缓冲"] || 0],
     ["窗切片", o["窗切片"] || 0],
     ["迟到", o["迟到"] || 0],
+    ["归档", o["归档"] || 0],
   ];
 }
 function 渲染水位(el, overview) {
@@ -50,7 +51,7 @@ function 窗规一行(rules) {
 }
 function 装载摘要(report) {
   if (!report) return "";
-  return `入流 ${report["入流"] || 0} / 入缓冲 ${report["入缓冲"] || 0} / 迟到 ${report["迟到"] || 0} / 驳回 ${report["驳回"] || 0}`;
+  return `入流 ${report["入流"] || 0} / 入缓冲 ${report["入缓冲"] || 0} / 迟到 ${report["迟到"] || 0} / 归档 ${report["归档"] || 0} / 驳回 ${report["驳回"] || 0}`;
 }
 function 关窗摘要(report) {
   if (!report) return "";

@@ -2,7 +2,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from pathlib import Path
-from app.services import 目录, 装载, 关窗, 贯验, 夹具, 统计, 说明
+from app.services import 目录, 装载, 关窗, 贯验, 夹具, 统计, 说明, 裁决
 
 
 async def api_概览(request: Request):
@@ -40,6 +40,25 @@ async def api_切片(request: Request):
 
 async def api_迟到(request: Request):
     return JSONResponse(目录.迟到列表())
+
+
+async def api_裁决列表(request: Request):
+    return JSONResponse(裁决.裁决列表())
+
+
+async def api_裁决查(request: Request):
+    决 = 裁决.裁决查(request.path_params["name"])
+    if 决 is None:
+        return JSONResponse({"错误": "无裁决"}, status_code=404)
+    return JSONResponse(决)
+
+
+async def api_归档(request: Request):
+    return JSONResponse(裁决.归档列表())
+
+
+async def api_账册(request: Request):
+    return JSONResponse(裁决.账册列表())
 
 
 async def api_贯验列表(request: Request):
@@ -99,6 +118,10 @@ async def api_空桩(request: Request):
     Route("/api/入窗缓冲", api_缓冲),
     Route("/api/窗切片账", api_切片),
     Route("/api/迟到匣", api_迟到),
+    Route("/api/入窗裁决", api_裁决列表),
+    Route("/api/入窗裁决/{name}", api_裁决查),
+    Route("/api/出窗归档", api_归档),
+    Route("/api/切流账册", api_账册),
     Route("/api/窗贯验", api_贯验列表),
     Route("/api/夹具", api_夹具),
     Route("/api/观测点/装载", api_装载, methods=["POST"]),

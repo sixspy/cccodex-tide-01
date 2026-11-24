@@ -74,6 +74,41 @@ def 校验窗规补丁(体: dict) -> list[str]:
     return 错
 
 
+def 复核裁决(事件编号: str, conn=None) -> list[str]:
+    """对照同一裁决复核落定：缓冲/迟到匣/归档/账册行须与裁决同票。"""
+    自有 = conn is None
+    if 自有:
+        from app.db import 连接
+
+        conn = 连接()
+    try:
+        d = conn.execute("SELECT * FROM 入窗裁决 WHERE 事件编号=?", (事件编号,)).fetchone()
+        if not d:
+            return ["无裁决行"]
+        错: list[str] = []
+        命运 = d["命运"]
+        if 命运 == "入缓冲":
+            if not conn.execute("SELECT 1 FROM 入窗缓冲 WHERE 事件编号=?", (事件编号,)).fetchone():
+                错.append("裁决入缓冲但缓冲无行")
+        elif 命运 == "迟到":
+            if not conn.execute("SELECT 1 FROM 迟到匣 WHERE 事件编号=?", (事件编号,)).fetchone():
+                错.append("裁决迟到但迟到匣无行")
+            if not conn.execute("SELECT 1 FROM 切流账册 WHERE 指纹=?", (d["指纹"],)).fetchone():
+                错.append("裁决迟到但账册无指纹")
+        elif 命运 == "归档":
+            if not conn.execute("SELECT 1 FROM 出窗归档 WHERE 归档键=?", (d["归档键"],)).fetchone():
+                错.append("裁决归档但归档无行")
+        elif 命运 in ("整票拒", "回刷拒"):
+            if not conn.execute("SELECT 1 FROM 切流账册 WHERE 指纹=?", (d["指纹"],)).fetchone():
+                错.append("裁决拒但账册无指纹")
+        else:
+            错.append(f"未知命运:{命运}")
+        return 错
+    finally:
+        if 自有:
+            conn.close()
+
+
 def 摘要错误(错: list[str], 上限: int = 8) -> str:
     if not 错:
         return ""

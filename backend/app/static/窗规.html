@@ -43,6 +43,12 @@
       </header>
 
       <section class="卷">
+        <h2>窗规策略</h2>
+        <p class="说明">出窗口径全局只贯彻一种：切流账册记出窗指纹并拒绝回刷；双写两轨把出窗点写进只读归档旁路。入窗裁决只认事件时。</p>
+        <div class="阶段" id="策略卡"></div>
+        <p class="说明" id="命运统计"></p>
+      </section>
+      <section class="卷">
         <h2>窗规原文</h2>
         <pre class="回执" id="规">加载中…</pre>
       </section>
@@ -56,7 +62,27 @@
       </section>
       <script>
       (async () => {
-        document.getElementById("规").textContent = JSON.stringify(await 潮切.getJSON("/api/窗规"), null, 2);
+        const 规 = await 潮切.getJSON("/api/窗规");
+        document.getElementById("规").textContent = JSON.stringify(规, null, 2);
+        const 卡 = document.getElementById("策略卡");
+        const 口径 = 规["出窗口径"] || "切流账册";
+        const 处置 = 规["切流处置"] || "进迟到匣";
+        const 项 = [
+          ["出窗口径", 口径, 口径 === "双写两轨" ? "出窗点进只读归档旁路，缓冲只含窗内点" : "出窗点记指纹，回刷拒，缓冲不涨"],
+          ["切流处置", 处置, 处置 === "整票拒" ? "出窗点整票拒，不进迟到匣" : "出窗点进迟到匣，账册留拒因"],
+          ["命运图例", "中文命运", "入缓冲→已入缓冲 · 迟到→已迟到 · 归档→已归档 · 整票拒/回刷拒→已驳回"],
+        ];
+        for (const [名, 值, 文] of 项) {
+          const c = document.createElement("div");
+          c.className = "阶卡";
+          c.innerHTML = `<div class="序">${潮切.安全文本(名)}</div><b>${潮切.安全文本(值)}</b><span>${潮切.安全文本(文)}</span>`;
+          卡.appendChild(c);
+        }
+        const 裁决 = await 潮切.getJSON("/api/入窗裁决");
+        const 统 = {};
+        for (const d of 裁决) 统[d.命运] = (统[d.命运] || 0) + 1;
+        const 文 = Object.entries(统).map(([k, v]) => `${k} ${v} 笔`).join(" · ");
+        document.getElementById("命运统计").textContent = 文 ? `裁决命运分布：${文}` : "尚无入窗裁决。";
         const s = await 潮切.getJSON("/api/空桩");
         document.getElementById("空桩").textContent = "空桩 " + s.条数 + "：" + (s.空桩 || []).join(" · ");
       })();
